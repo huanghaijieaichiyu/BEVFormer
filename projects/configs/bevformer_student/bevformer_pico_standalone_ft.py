@@ -249,7 +249,7 @@ load_from = 'work_dirs/bevformer_pico_distill/latest.pth'
 
 # resume_from can be set if you want to resume this specific fine-tuning run
 # or path to a checkpoint in work_dir below
-resume_from = ' work_dirs/bevformer_pico_distill_train/latest.pth'
+resume_from = 'work_dirs/bevformer_pico_distill_train/latest.pth'
 
 # --- Workspace ---
 work_dir = './work_dirs/bevformer_pico_standalone_ft'
