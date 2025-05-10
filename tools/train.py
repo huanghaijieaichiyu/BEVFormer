@@ -3,31 +3,35 @@
 # ---------------------------------------------
 #  Modified by Zhiqi Li
 # ---------------------------------------------
- 
+
+# Add project root to sys.path to ensure modules can be imported
 from __future__ import division
-
-import argparse
-import copy
-import mmcv
-import os
-import time
-import torch
-import warnings
-from mmcv import Config, DictAction
-from mmcv.runner import get_dist_info, init_dist
-from os import path as osp
-
-from mmdet import __version__ as mmdet_version
-from mmdet3d import __version__ as mmdet3d_version
-#from mmdet3d.apis import train_model
-
-from mmdet3d.datasets import build_dataset
-from mmdet3d.models import build_model
-from mmdet3d.utils import collect_env, get_root_logger
-from mmdet.apis import set_random_seed
-from mmseg import __version__ as mmseg_version
-
+import sys
 from mmcv.utils import TORCH_VERSION, digit_version
+from mmseg import __version__ as mmseg_version
+from mmdet.apis import set_random_seed
+from mmdet3d.utils import collect_env, get_root_logger
+from mmdet3d.models import build_model
+from mmdet3d.datasets import build_dataset
+from mmdet3d import __version__ as mmdet3d_version
+from mmdet import __version__ as mmdet_version
+from os import path as osp
+from mmcv.runner import get_dist_info, init_dist
+from mmcv import Config, DictAction
+import warnings
+import torch
+import time
+import mmcv
+import copy
+import argparse
+import os
+current_script_path = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.abspath(os.path.join(current_script_path, os.pardir))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+
+# from mmdet3d.apis import train_model
 
 
 def parse_args():
@@ -159,7 +163,7 @@ def main():
     else:
         cfg.gpu_ids = range(1) if args.gpus is None else range(args.gpus)
     if digit_version(TORCH_VERSION) == digit_version('1.8.1') and cfg.optimizer['type'] == 'AdamW':
-        cfg.optimizer['type'] = 'AdamW2' # fix bug in Adamw
+        cfg.optimizer['type'] = 'AdamW2'  # fix bug in Adamw
     if args.autoscale_lr:
         # apply the linear scaling rule (https://arxiv.org/abs/1706.02677)
         cfg.optimizer['lr'] = cfg.optimizer['lr'] * len(cfg.gpu_ids) / 8

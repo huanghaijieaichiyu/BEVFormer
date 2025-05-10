@@ -134,3 +134,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+.vscode
+detectron2
+mmdetection3d
+runs/visual

@@ -1,10 +1,12 @@
+# import mmcls.models.backbones.convnext # 不再需要，因为我们使用timm版本
 from .core.bbox.assigners.hungarian_assigner_3d import HungarianAssigner3D
 from .core.bbox.coders.nms_free_coder import NMSFreeCoder
 from .core.bbox.match_costs import BBox3DL1Cost
 from .core.evaluation.eval_hooks import CustomDistEvalHook
 from .datasets.pipelines import (
-  PhotoMetricDistortionMultiViewImage, PadMultiViewImage, 
-  NormalizeMultiviewImage,  CustomCollect3D)
+    PhotoMetricDistortionMultiViewImage, PadMultiViewImage,
+    NormalizeMultiviewImage,  CustomCollect3D)
+from .models.backbones import *  # 确保导入自定义的backbones
 from .models.utils import *
 from .models.opt.adamw import AdamW2
 from .bevformer import *

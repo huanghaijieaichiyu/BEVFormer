@@ -21,8 +21,6 @@ point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_size = [0.2, 0.2, 8]
 
 
-
-
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 
@@ -45,7 +43,7 @@ _ffn_dim_ = _dim_*2
 _num_levels_ = 1
 bev_h_ = 50
 bev_w_ = 50
-queue_length = 3 # each sequence contains `queue_length` frames.
+queue_length = 3  # each sequence contains `queue_length` frames.
 
 model = dict(
     type='BEVFormer',
@@ -147,7 +145,7 @@ model = dict(
             num_feats=_pos_dim_,
             row_num_embed=bev_h_,
             col_num_embed=bev_w_,
-            ),
+        ),
         loss_cls=dict(
             type='FocalLoss',
             use_sigmoid=True,
@@ -166,7 +164,8 @@ model = dict(
             type='HungarianAssigner3D',
             cls_cost=dict(type='FocalLossCost', weight=2.0),
             reg_cost=dict(type='BBox3DL1Cost', weight=0.25),
-            iou_cost=dict(type='IoUCost', weight=0.0), # Fake cost. This is just to make it compatible with DETR head.
+            # Fake cost. This is just to make it compatible with DETR head.
+            iou_cost=dict(type='IoUCost', weight=0.0),
             pc_range=point_cloud_range))))
 
 dataset_type = 'CustomNuScenesDataset'
@@ -177,7 +176,8 @@ file_client_args = dict(backend='disk')
 train_pipeline = [
     dict(type='LoadMultiViewImageFromFiles', to_float32=True),
     dict(type='PhotoMetricDistortionMultiViewImage'),
-    dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True, with_attr_label=False),
+    dict(type='LoadAnnotations3D', with_bbox_3d=True,
+         with_label_3d=True, with_attr_label=False),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectNameFilter', classes=class_names),
     dict(type='NormalizeMultiviewImage', **img_norm_cfg),
@@ -190,7 +190,7 @@ train_pipeline = [
 test_pipeline = [
     dict(type='LoadMultiViewImageFromFiles', to_float32=True),
     dict(type='NormalizeMultiviewImage', **img_norm_cfg),
-   
+
     dict(
         type='MultiScaleFlipAug3D',
         img_scale=(1600, 900),
