@@ -6,6 +6,7 @@ _base_ = ['./bevformer_convnext_tiny.py']
 # --- Teacher Model Configuration ---
 # Define the path to your pre-trained bevformer_tiny checkpoint
 # !!! IMPORTANT: Replace this with the actual path to your checkpoint !!!
+# !!! IMPORTANT: Verify this path !!!
 teacher_ckpt = 'ckpts/bevformer_tiny_epoch_24.pth'
 
 # Load the base configuration for the teacher model (bevformer_tiny)
@@ -20,7 +21,7 @@ model = dict(
     # Examples: 'DistillBEVFormer', 'GeneralDistiller'
     # If your framework handles distillation differently (e.g., via hooks or runner),
     # this structure might need adjustment.
-    type='DistillBEVFormer',  # Replace with your actual Distiller model type if different
+    type='DistillBEVFormer',  # Your main distiller model wrapper
 
     # --- Teacher Model Setup ---
     teacher_cfg=teacher_cfg_path,
@@ -32,36 +33,56 @@ model = dict(
 
     # --- Distillation Loss Configuration ---
     distiller=dict(
-        type='FeatureLossDistiller',  # A hypothetical distiller focusing on feature loss
+        # This can be a generic distiller that iterates through losses
+        type='FeatureLossDistiller',
         distill_losses=dict(
-            # Define a name for this specific feature distillation loss
-            loss_feature_neck=dict(
-                type='FeatureLoss',  # A loss module comparing feature maps
-                # Location to extract student features (output of img_neck)
-                student_feature_loc='img_neck',
-                # Location to extract teacher features (output of img_neck)
-                teacher_feature_loc='img_neck',
-                loss_cfg=dict(type='MSELoss', loss_weight=1.0,
-                              reduction='mean'),  # Example: MSE Loss
-                # --- Feature Dimension Adaptation (if needed) ---
-                # If the channel dimensions of student and teacher features at 'img_neck'
-                # do not match, you need an adapter layer.
-                # Assuming bevformer_tiny neck output C=256 and convnext_tiny neck output C=256.
-                # If they differ, uncomment and configure the adapter:
-                # adapt_cfg=dict(
-                #     type='Conv2dAdapter', # Example adapter type (e.g., a 1x1 Conv)
-                #     in_channels=STUDENT_NECK_OUTPUT_CHANNELS, # e.g., 512 if neck doesn't reduce
-                #     out_channels=TEACHER_NECK_OUTPUT_CHANNELS, # e.g., 256
-                #     kernel_size=1
-                # )
-            )
-            # You could potentially add more feature losses here, e.g., for BEV features:
-            # loss_feature_bev=dict(
-            #     type='FeatureLoss',
-            #     student_feature_loc='pts_bbox_head.bev_encoder', # Example BEV feature location
-            #     teacher_feature_loc='pts_bbox_head.bev_encoder', # Example BEV feature location
-            #     loss_cfg=dict(type='MSELoss', loss_weight=2.0, reduction='mean'),
-            # )
+            # 1. Distill the final BEV feature map from BEVFormerEncoder output
+            # This is a direct feature distillation (MSE) without attention guidance on the loss itself.
+            loss_bev_encoder_output_map=dict(
+                type='FeatureLoss',  # Using standard FeatureLoss
+                # Example path: output of BEVFormerEncoder
+                student_feature_loc='pts_bbox_head.transformer.encoder.saved_bev_features',
+                teacher_feature_loc='pts_bbox_head.transformer.encoder.saved_bev_features',
+                loss_cfg=dict(type='MSELoss', loss_weight=2.0,
+                              reduction='mean'),
+            ),
+
+            # 2. Attention-guided distillation of TemporalSelfAttention output (last encoder layer)
+            # Encoder has 3 layers (0, 1, 2). We use the last one (index 2).
+            # attentions[0] in BEVFormerLayer is TemporalSelfAttention.
+            loss_encoder_temporal_L2_guided=dict(
+                type='AttentionGuidedFeatureLoss',  # Your custom loss
+                student_feature_loc='pts_bbox_head.transformer.encoder.layers[2].attentions[0].saved_output_feature',
+                teacher_feature_loc='pts_bbox_head.transformer.encoder.layers[2].attentions[0].saved_output_feature',
+                teacher_attention_loc='pts_bbox_head.transformer.encoder.layers[2].attentions[0].saved_attention_map',
+                base_loss_cfg=dict(type='MSELoss', reduction='mean'),
+                loss_weight=1.0,  # Recommended weight
+            ),
+
+            # 3. Attention-guided distillation of SpatialCrossAttention output (last encoder layer)
+            # attentions[1] in BEVFormerLayer is SpatialCrossAttention.
+            # MSDeformableAttention3D is within SpatialCrossAttention.
+            loss_encoder_spatial_L2_guided=dict(
+                type='AttentionGuidedFeatureLoss',
+                student_feature_loc='pts_bbox_head.transformer.encoder.layers[2].attentions[1].saved_output_feature',
+                teacher_feature_loc='pts_bbox_head.transformer.encoder.layers[2].attentions[1].saved_output_feature',
+                # Attention from MSDeformableAttention3D
+                teacher_attention_loc='pts_bbox_head.transformer.encoder.layers[2].attentions[1].deformable_attention.saved_attention_map',
+                base_loss_cfg=dict(type='MSELoss', reduction='mean'),
+                loss_weight=1.5,  # Recommended weight
+            ),
+
+            # 4. Attention-guided distillation of Decoder's Cross-Attention output (last decoder layer)
+            # Decoder has 6 layers (0-5). We use the last one (index 5).
+            # attentions[1] in DetrTransformerDecoderLayer is CustomMSDeformableAttention (cross-attention).
+            loss_decoder_cross_attn_L5_guided=dict(
+                type='AttentionGuidedFeatureLoss',
+                student_feature_loc='pts_bbox_head.transformer.decoder.layers[5].attentions[1].saved_output_feature',
+                teacher_feature_loc='pts_bbox_head.transformer.decoder.layers[5].attentions[1].saved_output_feature',
+                teacher_attention_loc='pts_bbox_head.transformer.decoder.layers[5].attentions[1].saved_attention_map',
+                base_loss_cfg=dict(type='MSELoss', reduction='mean'),
+                loss_weight=1.5,  # Recommended weight
+            ),
         )
     )
 )
@@ -80,8 +101,10 @@ total_epochs = 1000
 # Point to the newly created modules
 custom_imports = dict(
     imports=[
-        'projects.bevformer_mods.distillers',
-        'projects.bevformer_mods.losses'
+        'projects.bevformer_mods.distillers',  # If you have custom distillers
+        'projects.bevformer_mods.losses',     # For AttentionGuidedFeatureLoss
+        # Add paths to modified BEVFormer modules if they are in custom locations
+        # e.g., 'projects.bevformer_mods.bevformer_modules'
     ],
     allow_failed_imports=False
 )

@@ -5,6 +5,7 @@
 #  Modified by Zhiqi Li
 # ---------------------------------------------
 
+from mmcv.cnn.bricks.transformer import build_feedforward_network, build_attention
 import numpy as np
 import torch
 import copy
@@ -406,11 +407,6 @@ class BEVFormerLayer(MyCustomBaseTransformerLayer):
         return query
 
 
-
-
-from mmcv.cnn.bricks.transformer import build_feedforward_network, build_attention
-
-
 @TRANSFORMER_LAYER.register_module()
 class MM_BEVFormerLayer(MyCustomBaseTransformerLayer):
     """multi-modality fusion layer.
@@ -439,13 +435,14 @@ class MM_BEVFormerLayer(MyCustomBaseTransformerLayer):
         assert len(operation_order) == 6
         assert set(operation_order) == set(
             ['self_attn', 'norm', 'cross_attn', 'ffn'])
-        self.cross_model_weights = torch.nn.Parameter(torch.tensor(0.5), requires_grad=True) 
+        self.cross_model_weights = torch.nn.Parameter(
+            torch.tensor(0.5), requires_grad=True)
         if lidar_cross_attn_layer:
-            self.lidar_cross_attn_layer = build_attention(lidar_cross_attn_layer)
+            self.lidar_cross_attn_layer = build_attention(
+                lidar_cross_attn_layer)
             # self.cross_model_weights+=1
         else:
             self.lidar_cross_attn_layer = None
-
 
     def forward(self,
                 query,
@@ -577,9 +574,11 @@ class MM_BEVFormerLayer(MyCustomBaseTransformerLayer):
                         reference_points=ref_2d[bs:],
                         spatial_shapes=torch.tensor(
                             [[bev_h, bev_w]], device=query.device),
-                        level_start_index=torch.tensor([0], device=query.device),
-                        )
-                query = new_query1 * self.cross_model_weights + (1-self.cross_model_weights) * new_query2
+                        level_start_index=torch.tensor(
+                            [0], device=query.device),
+                    )
+                query = new_query1 * self.cross_model_weights + \
+                    (1-self.cross_model_weights) * new_query2
                 attn_index += 1
                 identity = query
 
