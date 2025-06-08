@@ -1,11 +1,11 @@
-# BEVFormer-Pico (student with ConvNeXt-Nano) with Knowledge Distillation from BEVFormer-Tiny
+# BEVFormer-Pico (student with SE-ResNet-18) with Knowledge Distillation from BEVFormer-Tiny
 # This config inherits from bevformer_tiny and modifies the model architecture to be smaller
 
 _base_ = [
     '../bevformer/bevformer_tiny.py',  # Inherit basic settings, dataset, etc.
 ]
 
-# --- Student Model: BEVFormer-Pico/Nano ---
+# --- Student Model: BEVFormer-Pico ---
 # Overrides for student version
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2,
                      51.2, 3.0]  # Keep same as tiny for now
@@ -27,56 +27,56 @@ teacher_cfg_path = 'projects/configs/bevformer/bevformer_tiny.py'
 # 更新教师模型权重路径
 teacher_checkpoint_path = 'ckpts/bevformer_tiny_epoch_24.pth'
 
-# 学生模型权重预加载
-student_checkpoint_path = 'work_dirs/bevformer_pico_distill/latest.pth'
-
 # --- Distillation Configuration ---
-# Load student model checkpoint if available for resuming training
-load_from = student_checkpoint_path
-resume_from = student_checkpoint_path
-
-distillation_cfg = dict(
-    loss_weight=1.0,       # Weight for the BEV feature distillation loss
-    loss_type='mse',       # 'mse' or 'l1'
-    # Type of adapter if channel dims mismatch ('conv1x1', 'linear', or None)
-    adapter='conv1x1',
-                           # Adapter will be used if student_embed_dims != teacher_embed_dims
+# Distilling from image neck features, which are 4D and compatible with the loss function
+distiller = dict(
+    distill_losses=dict(
+        loss_img_feat=dict(
+            type='FeatureLoss',
+            student_feature_loc='img_neck',  # Distill from FPN output
+            teacher_feature_loc='img_neck',
+            loss_func=dict(
+                type='MSELoss',
+                loss_weight=1.0,
+            ),
+            # Adapter to match student's 128 channels to teacher's 256
+            channel_adapter=dict(
+                type='Conv2dAdapter',
+                in_channels=_dim_,
+                out_channels=256,  # Teacher's FPN output dim
+                kernel_size=1,
+            ),
+            # Spatial adapter to upsample teacher's feature map to match student's
+            spatial_adapter=dict(
+                type='BilinearInterpolation',
+                target_size=(30, 50)  # H, W of student feature map
+            )
+        )
+    )
 )
 
-# --- Define Student Model using BEVFormerDistill ---
-# Note: convnext_nano stage 3 (out_indices=(3,)) output channels are 640 according to timm.
-# If bevformer_tiny.py img_neck expects 2048 (from ResNet50), this needs careful handling.
-# Here, we define the student's img_neck to take convnext_nano's output.
-
-# Channel number for convnext_nano output at out_indices=(3,)
-# This corresponds to the output of the 4th stage (index 3)
-CONVNEXT_NANO_STAGE3_CHANNELS = 640
-
+# --- Define Student Model using DistillBEVFormer ---
 model = dict(
-    type='BEVFormerDistill',  # Our new distillation model class
-    # Teacher model and distillation specific configurations
-    teacher_cfg_path=teacher_cfg_path,
-    teacher_checkpoint_path=teacher_checkpoint_path,
-    distillation_cfg=distillation_cfg,
+    type='DistillBEVFormer',  # Use the implemented distiller class
+    # Pass configs to the distiller wrapper
+    teacher_cfg=teacher_cfg_path,
+    teacher_ckpt=teacher_checkpoint_path,
+    distiller=distiller,
 
-    # Student BEVFormer (using ConvNeXt-Nano backbone)
-    use_grid_mask=True,  # Copied from tiny
-    video_test_mode=True,  # Copied from tiny
+    # --- Student BEVFormer (SE-ResNet-18 backbone) kwargs ---
+    use_grid_mask=True,
+    video_test_mode=True,
     img_backbone=dict(
-        _delete_=True,  # Prevent merging with base config's img_backbone
-        type='ConvNeXtTimm',
-        # Smaller backbone for pico (假设有这个模型，或使用其他小型模型)
-        model_name='convnext_nano',
-        pretrained=True,
-        out_indices=(3,),  # Typically last stage
-        drop_path_rate=0.1,  # Adjusted
-        layer_scale_init_value=1e-6,
+        _delete_=True,
+        type='TimmBackbone',      # Use the generic timm wrapper
+        model_name='seresnet18',  # Load seresnet18 from timm library
+        pretrained=True,         # Use timm's pretrained weights
+        out_indices=(3,),        # Output from the last stage
     ),
     img_neck=dict(
         type='FPN',
-        # ConvNeXt-Femto stage 3 output channels (假设值，需要根据实际模型调整)
-        # Adjust based on convnext_femto actual output channels
-        in_channels=[CONVNEXT_NANO_STAGE3_CHANNELS],
+        # timm's seresnet18 with out_indices=(3,) outputs 256 channels, not 512.
+        in_channels=[256],
         out_channels=_dim_,  # Student's dimension
         start_level=0,
         add_extra_convs='on_output',
@@ -237,5 +237,19 @@ log_config = dict(
 # 检查点配置
 checkpoint_config = dict(interval=1)
 
+# Initialize student model with pre-trained weights to accelerate distillation.
+# The runner will load weights from the teacher's checkpoint into the student model.
+# Layers with mismatched names or shapes will be ignored.
+load_from = 'ckpts/bevformer_tiny_epoch_24.pth'
+
 # 工作目录
 work_dir = './work_dirs/bevformer_nano_student_distill_from_tiny'
+
+# Add custom imports to ensure the custom distiller and backbone are registered
+custom_imports = dict(
+    imports=[
+        'projects.bevformer_mods.distillers',
+        'projects.mmdet3d_plugin.models.backbones.timm_backbone'
+    ],
+    allow_failed_imports=False
+)

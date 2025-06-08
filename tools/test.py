@@ -3,6 +3,9 @@
 # ---------------------------------------------
 #  Modified by Zhiqi Li
 # ---------------------------------------------
+import os.path as osp
+import sys
+import time
 import argparse
 import mmcv
 import os
@@ -16,13 +19,23 @@ from mmcv.runner import (get_dist_info, init_dist, load_checkpoint,
 
 from mmdet3d.apis import single_gpu_test
 from mmdet3d.datasets import build_dataset
-from projects.mmdet3d_plugin.datasets.builder import build_dataloader
 from mmdet3d.models import build_model
 from mmdet.apis import set_random_seed
-from projects.mmdet3d_plugin.bevformer.apis.test import custom_multi_gpu_test
 from mmdet.datasets import replace_ImageToTensor
-import time
-import os.path as osp
+# Add project root to Python path
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_project_root = os.path.abspath(os.path.join(_current_dir, os.pardir))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+try:
+    from projects.mmdet3d_plugin.datasets.builder import build_dataloader
+    from projects.mmdet3d_plugin.bevformer.apis.test import custom_multi_gpu_test
+except ImportError:
+    print("ImportError: Failed to import modules from projects.mmdet3d_plugin.")
+    print("Please ensure that the project structure is correct and the modules are available.")
+    print("If you are running this script from the root directory, make sure to set the PYTHONPATH correctly.")
+    print("For example, you can run:")
+    print("export PYTHONPATH=$PYTHONPATH:$(pwd)")
 
 
 def parse_args():

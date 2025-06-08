@@ -1,5 +1,5 @@
 from .vovnet import VoVNet
-from .convnext_timm import ConvNeXtTimm
+from .timm_backbone import TimmBackbone
 from .swin_timm import SwinTimm
 
-__all__ = ['VoVNet', 'ConvNeXtTimm', 'SwinTimm']
+__all__ = ['VoVNet', 'TimmBackbone', 'SwinTimm']

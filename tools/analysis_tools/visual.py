@@ -626,7 +626,7 @@ def render_sample_data(
 
 if __name__ == '__main__':
     nusc_dataroot = os.environ.get(
-        'NUSCENES_DATAROOT', '/mnt/f/datasets/nuscenes')
+        'NUSCENES_DATAROOT', 'datasets')
     nusc_version = os.environ.get('NUSCENES_VERSION', 'v1.0-mini')
 
     print(f"Loading NuScenes {nusc_version} from {nusc_dataroot}...")
@@ -638,7 +638,7 @@ if __name__ == '__main__':
         print("Please ensure NuScenes dataset is correctly set up and env vars NUSCENES_DATAROOT/NUSCENES_VERSION are correct if used.")
         exit()
 
-    results_file_path = 'test/bevformer_tiny/Wed_May__7_15_45_28_2025/pts_bbox/results_nusc.json'
+    results_file_path = 'test/bevformer_tiny/Sat_May_24_17_13_54_2025/pts_bbox/results_nusc.json'
     if not os.path.exists(results_file_path):
         print(f"Results file not found: {results_file_path}")
         print("Please provide a valid path to a results_nusc.json file.")
