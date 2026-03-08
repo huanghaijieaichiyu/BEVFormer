@@ -45,7 +45,7 @@ if [ "$1" = "--status" ]; then
     echo "============================================================"
     echo "  流程进度状态"
     echo "============================================================"
-    for step in step0_data_prep step1_ll_inference step2_nm_inference step3_visualization; do
+    for step in step0_data_prep step1_ll_inference step2_nm_inference step3_visualization step4_domain_analysis; do
         if is_done "$step"; then
             status="✅ 已完成"
             ts=$(stat -c '%y' "${STATUS_DIR}/${step}.done" 2>/dev/null | cut -d. -f1)
@@ -276,12 +276,36 @@ else
 fi
 
 # ═════════════════════════════════════════════════════════════════════════
-# Step 4: 部署 Web 查看器
+# Step 4: 图像域分析 (直方图 + t-SNE)
 # ═════════════════════════════════════════════════════════════════════════
 echo ""
-echo "[Step 4/4] 部署交互式 Web 查看器..."
+if is_done "step4_domain_analysis"; then
+    echo "[Step 4/5] ✅ 图像域分析已完成，跳过"
+    echo "  输出目录: runs/domain_analysis/"
+else
+    echo "[Step 4/5] 生成图像域分析图 (直方图 + t-SNE)..."
+    echo ""
 
-# 复制 viewer.html 到两个输出目录
+    python tools/analysis_tools/analyze_image_domains.py \
+        --lowlight-dataroot "${LL_ROOT}" \
+        --normal-dataroot   "${NM_ROOT}" \
+        --nusc-version      "${NUSC_VERSION}" \
+        --out-dir           runs/domain_analysis \
+        --num-normal        20 \
+        --num-night         20 \
+        --camera            CAM_FRONT
+
+    mark_done "step4_domain_analysis"
+    echo "  [Step 4] ✅ 完成"
+fi
+
+# ═════════════════════════════════════════════════════════════════════════
+# Step 5: 部署 Web 查看器
+# ═════════════════════════════════════════════════════════════════════════
+echo ""
+echo "[Step 5/5] 部署交互式 Web 查看器..."
+
+# 复制 viewer.html 到输出目录
 VIEWER_SRC="tools/analysis_tools/viewer.html"
 for vis_dir in runs/visual_comparison/front_only runs/visual_comparison/all_cams; do
     if [ -d "${vis_dir}" ]; then
@@ -295,11 +319,18 @@ echo "============================================================"
 echo "  🎉 全部完成!"
 echo "============================================================"
 echo ""
-echo "  📁 输出文件:"
+echo "  📁 检测对比图:"
 echo "    单视角: runs/visual_comparison/front_only/"
 echo "    全视角: runs/visual_comparison/all_cams/"
-echo "    指标:   runs/visual_comparison/*/global_metrics.png"
-echo "    图例:   runs/visual_comparison/*/legend.png"
+echo ""
+echo "  📊 图像域分析 (直方图/t-SNE):"
+echo "    runs/domain_analysis/"
+echo "    ├── histogram_grayscale.pdf  — 灰度直方图"
+echo "    ├── histogram_rgb.pdf        — RGB通道直方图"
+echo "    ├── tsne_comparison.pdf      — t-SNE散点图"
+echo "    ├── tsne_density.pdf         — t-SNE+密度等高线"
+echo "    ├── combined_analysis.pdf    — 2×2组合图"
+echo "    └── statistics.json          — 统计数据"
 echo ""
 echo "  🌐 启动 Web 查看器:"
 echo "    cd runs/visual_comparison/front_only && python -m http.server 8080"
