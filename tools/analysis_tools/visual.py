@@ -701,8 +701,8 @@ if __name__ == '__main__':
         exit()
 
     print(
-        f"Found {len(sample_token_list)} samples in results. Visualizing up to 10.")
-    for i, token in enumerate(sample_token_list[:10], start=1):
+        f"Found {len(sample_token_list)} samples in results. Visualizing all samples.")
+    for i, token in enumerate(sample_token_list, start=1):
         print(f"Rendering sample with output index {i} (token: {token})")
         render_sample_data(token, output_file_index=i,
                            pred_data=bevformer_results, verbose=False)
