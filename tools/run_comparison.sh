@@ -19,6 +19,14 @@
 
 set -e
 
+# ── 环境检查 ──
+if ! command -v python &> /dev/null; then
+    echo "[错误] 找不到 python 命令！"
+    echo "  请确认您已经激活了含有 BEVFormer 相关依赖的虚拟环境！"
+    echo "  例如: conda activate bevformer"
+    exit 1
+fi
+
 # ── 加载配置 ──
 source tools/comparison_env.sh
 
@@ -45,7 +53,7 @@ if [ "$1" = "--status" ]; then
     echo "============================================================"
     echo "  流程进度状态"
     echo "============================================================"
-    for step in step0_data_prep step1_ll_inference step2_nm_inference step3_visualization step4_domain_analysis; do
+    for step in step0_data_prep step1_ll_inference step2_nm_inference step3_visualization step4_domain_analysis step5_metrics_comparison; do
         if is_done "$step"; then
             status="✅ 已完成"
             ts=$(stat -c '%y' "${STATUS_DIR}/${step}.done" 2>/dev/null | cut -d. -f1)
@@ -73,9 +81,9 @@ echo "  Checkpoint:     ${CHECKPOINT}"
 echo "============================================================"
 
 # 显示当前进度
-TOTAL_STEPS=4
+TOTAL_STEPS=5
 DONE_COUNT=0
-for step in step0_data_prep step1_ll_inference step2_nm_inference step3_visualization; do
+for step in step0_data_prep step1_ll_inference step2_nm_inference step3_visualization step4_domain_analysis step5_metrics_comparison; do
     is_done "$step" && DONE_COUNT=$((DONE_COUNT + 1))
 done
 echo "  当前进度: ${DONE_COUNT}/${TOTAL_STEPS} 步骤已完成"
@@ -189,6 +197,8 @@ else
     LL_METRICS_DIR=$(dirname "${LL_RESULT}")
     [ -f "${LL_METRICS_DIR}/metrics_summary.json" ] && \
         cp "${LL_METRICS_DIR}/metrics_summary.json" test/lowlight_detection/
+    [ -f "${LL_METRICS_DIR}/metrics_details.json" ] && \
+        cp "${LL_METRICS_DIR}/metrics_details.json" test/lowlight_detection/
 
     mark_done "step1_ll_inference"
     echo "  [Step 1] ✅ 完成: test/lowlight_detection/results_nusc.json"
@@ -219,6 +229,8 @@ else
     NM_METRICS_DIR=$(dirname "${NM_RESULT}")
     [ -f "${NM_METRICS_DIR}/metrics_summary.json" ] && \
         cp "${NM_METRICS_DIR}/metrics_summary.json" test/normal_detection/
+    [ -f "${NM_METRICS_DIR}/metrics_details.json" ] && \
+        cp "${NM_METRICS_DIR}/metrics_details.json" test/normal_detection/
 
     mark_done "step2_nm_inference"
     echo "  [Step 2] ✅ 完成: test/normal_detection/results_nusc.json"
@@ -280,10 +292,10 @@ fi
 # ═════════════════════════════════════════════════════════════════════════
 echo ""
 if is_done "step4_domain_analysis"; then
-    echo "[Step 4/5] ✅ 图像域分析已完成，跳过"
+    echo "[Step 4/6] ✅ 图像域分析已完成，跳过"
     echo "  输出目录: runs/domain_analysis/"
 else
-    echo "[Step 4/5] 生成图像域分析图 (直方图 + t-SNE)..."
+    echo "[Step 4/6] 生成图像域分析图 (直方图 + t-SNE)..."
     echo ""
 
     python tools/analysis_tools/analyze_image_domains.py \
@@ -300,10 +312,35 @@ else
 fi
 
 # ═════════════════════════════════════════════════════════════════════════
-# Step 5: 部署 Web 查看器
+# Step 5: 学术指标对比与可视化 (mAP, NDS 等)
 # ═════════════════════════════════════════════════════════════════════════
 echo ""
-echo "[Step 5/5] 部署交互式 Web 查看器..."
+if is_done "step5_metrics_comparison"; then
+    echo "[Step 5/6] ✅ 学术指标对比可视化已完成，跳过"
+    echo "  输出目录: runs/metrics_comparison/"
+else
+    echo "[Step 5/6] 生成详细学术指标对比图表 (mAP, NDS, mATE等)..."
+    echo ""
+    
+    if [ ! -f "test/lowlight_detection/metrics_summary.json" ] || [ ! -f "test/normal_detection/metrics_summary.json" ]; then
+        echo "  [警告] metrics_summary.json 缺失，无法生成学术指标图表。"
+        echo "  请确认 Step 1 和 Step 2 正常生成了性能评估文件。"
+    else
+        python tools/analysis_tools/compare_metrics.py \
+            --ll-metrics test/lowlight_detection/metrics_summary.json \
+            --nm-metrics test/normal_detection/metrics_summary.json \
+            --out-dir runs/metrics_comparison
+            
+        mark_done "step5_metrics_comparison"
+        echo "  [Step 5] ✅ 完成"
+    fi
+fi
+
+# ═════════════════════════════════════════════════════════════════════════
+# Step 6: 部署 Web 查看器
+# ═════════════════════════════════════════════════════════════════════════
+echo ""
+echo "[Step 6/6] 部署交互式 Web 查看器..."
 
 # 复制 viewer.html 到输出目录
 VIEWER_SRC="tools/analysis_tools/viewer.html"
@@ -331,6 +368,13 @@ echo "    ├── tsne_comparison.pdf      — t-SNE散点图"
 echo "    ├── tsne_density.pdf         — t-SNE+密度等高线"
 echo "    ├── combined_analysis.pdf    — 2×2组合图"
 echo "    └── statistics.json          — 统计数据"
+echo ""
+echo "  📈 学术指标对比 (mAP, NDS):"
+echo "    runs/metrics_comparison/"
+echo "    ├── metrics_comparison_table.csv — 详细指标对比表格"
+echo "    ├── metrics_comparison_table.md  — Markdown版对应表格"
+echo "    ├── radar_global_metrics.pdf     — 全局指标雷达图"
+echo "    └── bar_per_class_map.pdf        — 各类别mAP柱状图"
 echo ""
 echo "  🌐 启动 Web 查看器:"
 echo "    cd runs/visual_comparison/front_only && python -m http.server 8080"
